@@ -1,9 +1,9 @@
 [phases.setup]
-nixPkgs = ["python39", "python39Packages.pip", "python39Packages.setuptools"]
+nixPkgs = ["python39", "python39Packages.pip"]
 
 [phases.install]
 cmds = [
-    "pip install --upgrade pip",
+    "pip install --upgrade pip setuptools wheel",
     "pip install -r requirements_railway.txt"
 ]
 
