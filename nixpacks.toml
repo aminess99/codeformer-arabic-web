@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["python39", "python39Packages.pip"]
+nixPkgs = ["python39", "python39Packages.pip", "python39Packages.setuptools"]
 
 [phases.install]
 cmds = [
