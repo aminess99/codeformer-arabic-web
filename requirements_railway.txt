@@ -22,7 +22,7 @@ Flask==2.3.3
 Flask-CORS==4.0.0
 
 # Face restoration dependencies
-basicsr>=1.4.2
+# basicsr>=1.4.2  # Using local basicsr instead
 facexlib>=0.3.0
 realesrgan>=0.3.0
 gfpgan>=1.3.8

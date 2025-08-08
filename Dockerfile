@@ -26,6 +26,9 @@ RUN pip install --no-cache-dir -r requirements_railway.txt
 # Copy the rest of the application
 COPY . .
 
+# Install local basicsr package
+RUN cd basicsr && pip install -e .
+
 # Create necessary directories
 RUN mkdir -p weights/CodeFormer weights/facelib weights/realesrgan weights/gfpgan
 
