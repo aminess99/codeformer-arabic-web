@@ -9,7 +9,7 @@ import time
 from torch.utils.cpp_extension import BuildExtension, CppExtension, CUDAExtension
 from utils.misc import gpu_is_available
 
-version_file = './basicsr/version.py'
+version_file = './version.py'
 
 
 def readme():
