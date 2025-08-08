@@ -69,7 +69,8 @@ def initialize_models():
         print(f"Error initializing models: {e}")
         return False
 
-def process_image_with_codeformer(image_data, fidelity_weight=0.5, enhance_background=False):
+def process_image_with_codeformer(image_data, fidelity_weight=0.5, enhance_background=False, processing_speed='balanced'):
+    """معالجة الصور مع تحسينات الأداء لـ Real-ESRGAN"""
     global net, face_helper, device
     
     try:
@@ -80,6 +81,17 @@ def process_image_with_codeformer(image_data, fidelity_weight=0.5, enhance_backg
         image_bytes = base64.b64decode(image_data)
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # تحسين حجم الصورة لتسريع المعالجة
+        # تقليل حجم الصور الكبيرة جداً قبل المعالجة
+        max_size = 1024  # الحد الأقصى للعرض أو الارتفاع
+        height, width = img.shape[:2]
+        if max(height, width) > max_size:
+            ratio = max_size / max(height, width)
+            new_width = int(width * ratio)
+            new_height = int(height * ratio)
+            img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_LANCZOS4)
+            print(f"تم تصغير الصورة إلى {new_width}x{new_height} لتحسين الأداء")
         
         if img is None:
             return None, "Failed to decode image"
@@ -134,33 +146,74 @@ def process_image_with_codeformer(image_data, fidelity_weight=0.5, enhance_backg
                 from basicsr.utils.realesrgan_utils import RealESRGANer
                 from basicsr.archs.rrdbnet_arch import RRDBNet
                 
-                print("Creating RRDBNet model...")
-                # Create RRDBNet model for RealESRGAN
-                realesrgan_model = RRDBNet(
-                    num_in_ch=3,
-                    num_out_ch=3,
-                    num_feat=64,
-                    num_block=23,
-                    num_grow_ch=32,
-                    scale=2,
-                )
+                # تحقق من حجم الصورة - تخطي المعالجة للصور الصغيرة جداً
+                height, width = restored_img.shape[:2]
+                min_size_for_enhancement = 64  # الحد الأدنى للحجم
                 
-                print("Initializing RealESRGANer...")
-                upsampler = RealESRGANer(
-                    scale=2,
-                    model_path='weights/realesrgan/RealESRGAN_x2plus.pth',
-                    model=realesrgan_model,
-                    tile=400,
-                    tile_pad=10,
-                    pre_pad=0,
-                    half=False
-                )
-                
-                print("Enhancing image with RealESRGAN...")
-                # Enhance the entire image
-                enhanced_img, _ = upsampler.enhance(restored_img, outscale=2)
-                restored_img = enhanced_img
-                print("Background enhanced with RealESRGAN successfully!")
+                if max(height, width) < min_size_for_enhancement:
+                    print(f"تخطي تحسين الخلفية - الصورة صغيرة جداً ({width}x{height})")
+                else:
+                    print("Creating RRDBNet model...")
+                    # Create RRDBNet model for RealESRGAN
+                    realesrgan_model = RRDBNet(
+                        num_in_ch=3,
+                        num_out_ch=3,
+                        num_feat=64,
+                        num_block=23,
+                        num_grow_ch=32,
+                        scale=2,
+                    )
+                    
+                    print("Initializing RealESRGANer...")
+                    # تحسين إعدادات Real-ESRGAN للحصول على أداء أسرع
+                    # tile=512: زيادة حجم التجانب لتقليل عدد العمليات
+                    # half=True: استخدام دقة نصفية لتسريع المعالجة (إذا كان GPU يدعمها)
+                    # tile_pad=5: تقليل padding لتوفير الذاكرة
+                    
+                    # تحديد حجم التجانب بناءً على سرعة المعالجة المطلوبة
+                    if processing_speed == 'fast':
+                        tile_size = 256  # أصغر حجم للسرعة
+                        tile_pad = 2
+                        use_half = False  # تجنب half precision للاستقرار
+                    elif processing_speed == 'quality':
+                        if torch.cuda.is_available():
+                            gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                            tile_size = 1024 if gpu_memory > 8 else 512
+                        else:
+                            tile_size = 512
+                        tile_pad = 10
+                        use_half = True if torch.cuda.is_available() else False
+                    else:  # balanced
+                        if torch.cuda.is_available():
+                            gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3  # GB
+                            if gpu_memory > 8:  # GPU قوي
+                                tile_size = 1024
+                            elif gpu_memory > 4:  # GPU متوسط
+                                tile_size = 512
+                            else:  # GPU ضعيف
+                                tile_size = 256
+                        else:
+                            tile_size = 256  # CPU فقط
+                        tile_pad = 5
+                        use_half = True if torch.cuda.is_available() else False
+                    
+                    print(f"استخدام tile size: {tile_size}, processing speed: {processing_speed}")
+                    
+                    upsampler = RealESRGANer(
+                        scale=2,
+                        model_path='weights/realesrgan/RealESRGAN_x2plus.pth',
+                        model=realesrgan_model,
+                        tile=tile_size,  # حجم التجانب المحسن
+                        tile_pad=tile_pad,  # padding محسن حسب السرعة
+                        pre_pad=0,
+                        half=use_half  # استخدام half precision حسب الإعدادات
+                    )
+                    
+                    print("Enhancing image with RealESRGAN...")
+                    # Enhance the entire image
+                    enhanced_img, _ = upsampler.enhance(restored_img, outscale=2)
+                    restored_img = enhanced_img
+                    print("Background enhanced with RealESRGAN successfully!")
             except Exception as e:
                 print(f"Background enhancement failed: {e}")
                 import traceback
@@ -528,7 +581,17 @@ HTML_TEMPLATE = '''
                         <span class="checkmark"></span>
                         تحسين الخلفية والصورة الكاملة
                     </label>
-                    <small>تحسين جودة الصورة بالكامل بالإضافة إلى الوجه</small>
+                    <small>تحسين جودة الصورة بالكامل بالإضافة إلى الوجه (قد يستغرق وقتاً أطول)</small>
+                </div>
+                
+                <div class="control-group">
+                    <label for="processingSpeed">سرعة المعالجة: <span id="speedValue">متوازن</span></label>
+                    <select id="processingSpeed" class="select">
+                        <option value="fast">سريع (جودة أقل)</option>
+                        <option value="balanced" selected>متوازن (موصى به)</option>
+                        <option value="quality">جودة عالية (أبطأ)</option>
+                    </select>
+                    <small>اختر بين السرعة والجودة حسب احتياجاتك</small>
                 </div>
                 
                 <div class="control-group">
@@ -569,6 +632,16 @@ HTML_TEMPLATE = '''
         // Fidelity slider
         document.getElementById('fidelity').addEventListener('input', function() {
             document.getElementById('fidelityValue').textContent = this.value;
+        });
+        
+        // Processing speed selector
+        document.getElementById('processingSpeed').addEventListener('change', function() {
+            const speedTexts = {
+                'fast': 'سريع',
+                'balanced': 'متوازن', 
+                'quality': 'جودة عالية'
+            };
+            document.getElementById('speedValue').textContent = speedTexts[this.value];
         });
         
         function handleDragOver(e) {
@@ -641,6 +714,7 @@ HTML_TEMPLATE = '''
                     const imageData = e.target.result;
                     const fidelity = document.getElementById('fidelity').value;
                     const enhanceBackground = document.getElementById('enhanceBackground').checked;
+                    const processingSpeed = document.getElementById('processingSpeed').value;
                     
                     // Send to backend for real processing
                     fetch('/api/process', {
@@ -651,7 +725,8 @@ HTML_TEMPLATE = '''
                         body: JSON.stringify({
                             image: imageData,
                             fidelity: fidelity,
-                            enhance_background: enhanceBackground
+                            enhance_background: enhanceBackground,
+                            processing_speed: processingSpeed
                         })
                     })
                 .then(response => response.json())
@@ -758,6 +833,7 @@ def process_image():
         image_data = data.get('image', '')
         fidelity_weight = float(data.get('fidelity', 0.5))
         enhance_background = data.get('enhance_background', False)
+        processing_speed = data.get('processing_speed', 'balanced')
         
         if not image_data:
             return jsonify({
@@ -766,7 +842,7 @@ def process_image():
             }), 400
         
         # Process image with CodeFormer
-        processed_image, message = process_image_with_codeformer(image_data, fidelity_weight, enhance_background)
+        processed_image, message = process_image_with_codeformer(image_data, fidelity_weight, enhance_background, processing_speed)
         
         if processed_image:
             return jsonify({
