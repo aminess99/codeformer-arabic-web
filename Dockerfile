@@ -21,6 +21,11 @@ COPY requirements_railway.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install torch first (required for basicsr)
+RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Install other requirements
 RUN pip install --no-cache-dir -r requirements_railway.txt
 
 # Copy the rest of the application
