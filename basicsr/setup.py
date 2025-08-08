@@ -13,9 +13,17 @@ version_file = './basicsr/version.py'
 
 
 def readme():
-    with open('README.md', encoding='utf-8') as f:
-        content = f.read()
-    return content
+    try:
+        with open('README.md', encoding='utf-8') as f:
+            content = f.read()
+        return content
+    except FileNotFoundError:
+        try:
+            with open('../README.md', encoding='utf-8') as f:
+                content = f.read()
+            return content
+        except FileNotFoundError:
+            return 'BasicSR - Open Source Image and Video Super-Resolution Toolbox'
 
 
 def get_git_hash():
@@ -109,9 +117,18 @@ def make_cuda_ext(name, module, sources, sources_cuda=None):
 
 
 def get_requirements(filename='requirements.txt'):
-    with open(os.path.join('.', filename), 'r') as f:
-        requires = [line.replace('\n', '') for line in f.readlines()]
-    return requires
+    try:
+        with open(os.path.join('.', filename), 'r') as f:
+            requires = [line.replace('\n', '') for line in f.readlines()]
+        return requires
+    except FileNotFoundError:
+        try:
+            with open(os.path.join('..', filename), 'r') as f:
+                requires = [line.replace('\n', '') for line in f.readlines()]
+            return requires
+        except FileNotFoundError:
+            # Return minimal requirements if file not found
+            return ['torch>=1.7', 'torchvision', 'opencv-python', 'pillow', 'numpy', 'scipy', 'tqdm', 'lmdb', 'pyyaml', 'yapf']
 
 
 if __name__ == '__main__':
