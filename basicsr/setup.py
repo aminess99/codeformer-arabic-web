@@ -79,6 +79,12 @@ version_info = ({})
     VERSION_INFO = ', '.join([x if x.isdigit() else f'"{x}"' for x in SHORT_VERSION.split('.')])
 
     version_file_str = content.format(time.asctime(), SHORT_VERSION, sha, VERSION_INFO)
+    
+    # Ensure the directory exists for version_file
+    version_dir = os.path.dirname(version_file)
+    if version_dir and not os.path.exists(version_dir):
+        os.makedirs(version_dir)
+    
     with open(version_file, 'w') as f:
         f.write(version_file_str)
 
